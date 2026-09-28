@@ -1,0 +1,67 @@
+import torch
+
+from torch.utils.cpp_extension import load
+
+
+extension = load(
+    name="cuda_rmsnorm_extension",
+    sources=[
+        "src/bindings.cpp",
+        "src/rmsnorm_naive.cu",
+    ],
+    extra_cflags=[
+        "/Zc:preprocessor",
+    ],
+    extra_cuda_cflags=[
+        "-Xcompiler",
+        "/Zc:preprocessor",
+    ],
+    verbose=True,
+)
+
+
+def rmsnorm_torch(x, gamma, eps=1e-6):
+    rms = torch.sqrt(
+        torch.mean(x * x, dim=-1, keepdim=True)
+        + eps
+    )
+
+    return x / rms * gamma
+
+SHAPES = [
+    (1, 768),
+    (1, 4096),
+    (128, 768),
+    (128, 4096),
+    (2048, 4096),
+]
+
+for tokens, hidden_size in SHAPES:
+
+    x = torch.randn(
+        tokens,
+        hidden_size,
+        device="cuda",
+    )
+
+    gamma = torch.randn(
+        hidden_size,
+        device="cuda",
+    )
+
+    expected = rmsnorm_torch(x, gamma)
+
+    actual = extension.rmsnorm_naive(
+        x,
+        gamma,
+        1e-6,
+    )
+
+    torch.testing.assert_close(
+        actual,
+        expected,
+        rtol=1e-4,
+        atol=1e-5,
+    )
+
+    print(f"{tokens}x{hidden_size}: PASS")
