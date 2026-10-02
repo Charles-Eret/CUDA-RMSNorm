@@ -3,7 +3,7 @@ import torch
 from torch.utils.cpp_extension import load
 
 
-KERNEL_NAME = "rmsnorm_shared"
+KERNEL_NAME = "rmsnorm_no_intermediate"
 
 extension = load(
     name=f"cuda_{KERNEL_NAME}_extension",
@@ -11,6 +11,7 @@ extension = load(
         "src/bindings.cpp",
         "src/rmsnorm_naive.cu",
         "src/rmsnorm_shared.cu",
+        "src/rmsnorm_no_intermediate.cu",
     ],
     extra_cflags=[
         "/Zc:preprocessor",
