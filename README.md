@@ -1,29 +1,26 @@
 # RMSNorm
 
-A simple PyTorch RMSNorm reference with space for a CUDA implementation.
+A PyTorch RMSNorm reference with naive and shared-memory CUDA implementations.
 
 ## Project structure
 
 ```text
-├── rmsnorm.py          # PyTorch reference and basic verification
 ├── src/
-│   ├── rmsnorm.cu      # CUDA implementation placeholder
-│   └── bindings.cpp    # C++ bindings placeholder
+│   ├── rmsnorm.py              # PyTorch reference and basic verification
+│   ├── rmsnorm_naive.cu        # Naive CUDA RMSNorm implementation
+│   ├── rmsnorm_shared.cu       # Shared-memory CUDA RMSNorm implementation
+│   ├── copy_kernel.cu          # CUDA tensor-copy kernel
+│   └── bindings.cpp            # C++ bindings for the CUDA implementations
 ├── benchmarks/
+│   └── benchmark_rmsnorm.py    # Compare PyTorch and CUDA implementations
 ├── tests/
+│   ├── test_extension.py       # CUDA tensor-copy extension test
+│   └── test_rmsnorm.py         # CUDA RMSNorm correctness checks
 ├── results/
+│   ├── pytorch_baseline.csv    # Saved PyTorch baseline timings
+│   └── rmsnorm_benchmark.csv   # Saved implementation benchmark timings
 └── README.md
 ```
-
-## Run the reference
-
-With PyTorch installed in your Python environment:
-
-```sh
-python rmsnorm.py
-```
-
-The script checks the output values and shape.
 
 # PHASES
 
