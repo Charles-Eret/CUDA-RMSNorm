@@ -3,11 +3,14 @@ import torch
 from torch.utils.cpp_extension import load
 
 
+KERNEL_NAME = "rmsnorm_shared"
+
 extension = load(
-    name="cuda_rmsnorm_extension",
+    name=f"cuda_{KERNEL_NAME}_extension",
     sources=[
         "src/bindings.cpp",
         "src/rmsnorm_naive.cu",
+        "src/rmsnorm_shared.cu",
     ],
     extra_cflags=[
         "/Zc:preprocessor",
@@ -51,7 +54,7 @@ for tokens, hidden_size in SHAPES:
 
     expected = rmsnorm_torch(x, gamma)
 
-    actual = extension.rmsnorm_naive(
+    actual = getattr(extension, KERNEL_NAME)(
         x,
         gamma,
         1e-6,

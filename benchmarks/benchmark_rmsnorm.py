@@ -10,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CUDA_SOURCES = [
     "src/bindings.cpp",
     "src/rmsnorm_naive.cu",
+    "src/rmsnorm_shared.cu",
 ]
 
 
@@ -26,6 +27,7 @@ def get_implementations():
     return {
         "pytorch": rmsnorm_torch,
         "naive": extension.rmsnorm_naive,
+        "shared": extension.rmsnorm_shared,
     }
 
 def rmsnorm_torch(x, gamma, eps=1e-6):
