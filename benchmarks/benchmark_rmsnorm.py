@@ -12,6 +12,7 @@ CUDA_SOURCES = [
     "src/rmsnorm_naive.cu",
     "src/rmsnorm_shared.cu",
     "src/rmsnorm_no_intermediate.cu",
+    "src/rmsnorm_fused.cu",
 ]
 
 
@@ -30,6 +31,7 @@ def get_implementations():
         "naive": extension.rmsnorm_naive,
         "shared": extension.rmsnorm_shared,
         "no_intermediate": extension.rmsnorm_no_intermediate,
+        "fused": extension.rmsnorm_fused,
     }
 
 def rmsnorm_torch(x, gamma, eps=1e-6):

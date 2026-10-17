@@ -19,6 +19,12 @@ torch::Tensor rmsnorm_no_intermediate(
     float eps
 );
 
+torch::Tensor rmsnorm_fused(
+    torch::Tensor x,
+    torch::Tensor gamma,
+    float eps
+);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def(
         "rmsnorm_naive",
@@ -35,4 +41,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         &rmsnorm_no_intermediate,
         "CUDA RMSNorm without an intermediate squared tensor"
     );
+    m.def("rmsnorm_fused", &rmsnorm_fused, "Fused CUDA RMSNorm");
 }

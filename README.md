@@ -1,6 +1,16 @@
 # RMSNorm
 
-A PyTorch RMSNorm reference with naive and shared-memory CUDA implementations.
+A PyTorch RMSNorm reference with naive, shared-memory, no-intermediate, and fused CUDA implementations.
+
+## Test and benchmark
+
+From the repository root, in an environment with CUDA-enabled PyTorch, Ninja,
+and the CUDA compiler installed (on Windows, use a shell with MSVC available):
+
+```sh
+python tests/test_rmsnorm.py
+python benchmarks/benchmark_rmsnorm.py
+```
 
 ## Project structure
 
@@ -89,3 +99,31 @@ A PyTorch RMSNorm reference with naive and shared-memory CUDA implementations.
 
 - **Next Step**
   - Fuse the RMS reduction and normalization into a single kernel, eliminating the `rms` global-memory write/read and another kernel launch.
+
+
+## Phase 9 — Fuse RMS Reduction and Normalization
+
+- **Design**
+  - Fused the RMS reduction and normalization stages into a **single CUDA kernel**.
+  - Kept the existing **one-block-per-token** shared-memory reduction.
+  - After reduction, thread 0 computes the inverse RMS and stores it in shared memory for use by the entire block.
+  - Threads then cooperatively normalize the token and apply `gamma` using coalesced global-memory accesses.
+  - Eliminated the intermediate `rms` tensor and reduced the pipeline from **2 → 1 kernel**.
+
+- **Results**
+  - Fusion improved performance across all tested shapes, with incremental speedups of **~1.06–3.12×** over the Phase 8 no-intermediate implementation.
+  - Largest improvement was `128×768`: **33.31 → 10.66 µs (~3.12×)**.
+  - `1×4096`: **22.85 → 13.17 µs (~1.73×)**.
+  - `128×4096`: **25.79 → 19.13 µs (~1.35×)**.
+  - For the largest workload, `2048×4096`, the improvement narrowed to **331.65 → 312.08 µs (~1.06×)**.
+  - Relative to naive CUDA, the fused implementation achieved up to **~21.2× overall speedup** at `128×4096`.
+
+- **Hypothesis**
+  - Fusion eliminates the second kernel launch and the global-memory write/read of the per-token RMS value.
+  - The eliminated RMS traffic is small relative to the per-element tensor traffic, so the performance gain is unlikely to come primarily from reduced DRAM traffic.
+  - The large speedups on smaller and medium-sized workloads suggest that **kernel-launch and inter-kernel overhead represent a significant fraction of execution time** for these shapes.
+  - As workload size increases, useful memory and arithmetic work dominates execution time, so eliminating one kernel launch has a smaller relative impact. This is consistent with the much smaller improvement at `2048×4096`.
+  - Nsight profiling is needed to verify these hypotheses and determine whether changes in memory-system behavior or other kernel-level effects also contribute.
+
+- **Next Step**
+  - Benchmark the fused implementation against optimized PyTorch RMSNorm across representative input shapes, then use Nsight Compute to investigate the hardware-level behavior of the Phase 8 and Phase 9 kernels.
