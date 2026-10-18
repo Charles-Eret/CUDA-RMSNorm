@@ -127,3 +127,22 @@ python benchmarks/benchmark_rmsnorm.py
 
 - **Next Step**
   - Benchmark the fused implementation against optimized PyTorch RMSNorm across representative input shapes, then use Nsight Compute to investigate the hardware-level behavior of the Phase 8 and Phase 9 kernels.
+
+  ## Phase 10 — Benchmark Against Optimized PyTorch
+
+- **Results**
+  - The fused CUDA implementation was competitive with, and in the current benchmark run faster than, `torch.nn.RMSNorm` across all tested workloads.
+  - The largest relative advantage appeared for very small token counts, where the fused implementation was substantially faster than PyTorch.
+  - As token count and total workload size increased, the performance gap narrowed significantly.
+  - For the largest workloads, the fused implementation and optimized PyTorch RMSNorm achieved very similar latency.
+  - The optimization progression from naive CUDA → shared-memory reduction → removal of the intermediate tensor → kernel fusion produced substantial overall improvement, bringing the custom implementation from well behind PyTorch on larger workloads to roughly comparable performance.
+
+- **Hypothesis**
+  - For very small workloads, execution time appears to be dominated by fixed costs rather than arithmetic or memory traffic. The fused kernel's low fixed overhead therefore provides a relatively large advantage.
+  - With only one or a few token blocks, the GPU is significantly underutilized, and increasing hidden dimension adds relatively little latency because the additional per-thread work remains small compared with fixed kernel and synchronization costs.
+  - As token count increases, the GPU receives substantially more useful work and memory traffic becomes a larger component of total execution time.
+  - At large workloads, the performance of the fused implementation converges toward optimized PyTorch, suggesting that both implementations may be approaching a similar hardware bottleneck.
+  - These explanations are preliminary; profiling is required before attributing the differences to specific effects such as memory bandwidth, occupancy, register pressure, or kernel overhead.
+
+- **Next Step**
+  - Use Nsight Compute to compare the Phase 8 and fused Phase 9 kernels at representative workloads and identify the dominant hardware-level bottlenecks.
