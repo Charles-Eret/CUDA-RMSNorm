@@ -110,7 +110,7 @@ The `2048`-token workloads best show the optimization progression as the kernels
 
 ### Latency at 2048 Tokens
 
-![Latency vs Hidden Size](results/latency.png)
+![Latency vs Hidden Size](results/Latency.png)
 
 | Hidden size | Naive | Shared | No intermediate | Fused | Register reuse | PyTorch |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -120,7 +120,7 @@ The `2048`-token workloads best show the optimization progression as the kernels
 
 ### Speedup over Naive at 2048 Tokens
 
-![Speedup vs Hidden Size](results/speedup.png)
+![Speedup vs Hidden Size](results/Speedup.png)
 
 | Hidden size | Shared | No intermediate | Fused | Register reuse | PyTorch |
 | ---: | ---: | ---: | ---: | ---: | ---: |
