@@ -4,13 +4,46 @@ A profiling-driven CUDA optimization study of RMSNorm implemented as a PyTorch C
 
 On the largest benchmarked workload (`2048 × 4096`), latency improved from **974.39 µs** for the naive CUDA implementation to **217.65 µs** with register reuse, a **4.48× overall speedup**. The optimized kernel was also **1.48× faster than `torch.nn.RMSNorm`** on this workload.
 
+## Performance Results
+
+The `2048`-token workloads best show the optimization progression as the kernels move toward a memory-bandwidth-limited regime.
+
+### Latency at 2048 Tokens
+
+![Latency vs Hidden Size](results/Latency.png)
+
+| Hidden size | Naive | Shared | No intermediate | Fused | Register reuse | PyTorch |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 768  | 187.84 µs | 114.13 µs | 72.84 µs | **45.77 µs** | 52.34 µs | 49.68 µs |
+| 2048 | 489.47 µs | 279.87 µs | 171.79 µs | 128.73 µs | **110.67 µs** | 147.18 µs |
+| 4096 | 974.39 µs | 546.35 µs | 333.02 µs | 311.23 µs | **217.65 µs** | 322.67 µs |
+
+### Speedup over Naive at 2048 Tokens
+
+![Speedup vs Hidden Size](results/Speedup.png)
+
+| Hidden size | Shared | No intermediate | Fused | Register reuse | PyTorch |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 768  | 1.65× | 2.58× | **4.10×** | 3.59× | 3.78× |
+| 2048 | 1.75× | 2.85× | 3.80× | **4.42×** | 3.33× |
+| 4096 | 1.78× | 2.93× | 3.13× | **4.48×** | 3.02× |
+
+The final register-reuse optimization is not universally faster. It improves the fused kernel on five of the nine tested shapes, with the largest benefit appearing at `2048×4096`. At smaller or more cache-friendly workloads, the extra register lifetime and instruction overhead can outweigh the reduction in memory traffic.
+
+Two examples illustrate this behavior:
+
+- `2048×4096`: **311.23 → 217.65 µs**, a **1.43× speedup** over fused.
+- `128×4096`: **16.16 → 17.98 µs**, an **11.3% latency regression**.
+
+This workload dependence motivated examining the kernels at the hardware level rather than treating any single optimization as universally beneficial.
+
 ## RMSNorm
 
 For a token with hidden dimension \(H\), RMSNorm computes
 
-\[
+$$
 y_i = \frac{x_i}{\sqrt{\frac{1}{H}\sum_{j=1}^{H} x_j^2 + \epsilon}} \cdot \gamma_i
-\]
+$$
 
 The operation has low arithmetic intensity: it performs relatively little computation per element while reading the input and scale tensors and writing the output. This makes parallel reduction, kernel-launch overhead, cache behavior, and global-memory traffic important performance considerations.
 
@@ -102,40 +135,7 @@ The benchmark uses:
 - Median per-call latency across the timing samples.
 - Module construction and weight initialization outside the timed region.
 
-The results below are derived from the latest benchmark run in `rmsnorm_benchmark1.csv`.
-
-## Performance Results
-
-The `2048`-token workloads best show the optimization progression as the kernels move toward a memory-bandwidth-limited regime.
-
-### Latency at 2048 Tokens
-
-![Latency vs Hidden Size](results/Latency.png)
-
-| Hidden size | Naive | Shared | No intermediate | Fused | Register reuse | PyTorch |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 768  | 187.84 µs | 114.13 µs | 72.84 µs | **45.77 µs** | 52.34 µs | 49.68 µs |
-| 2048 | 489.47 µs | 279.87 µs | 171.79 µs | 128.73 µs | **110.67 µs** | 147.18 µs |
-| 4096 | 974.39 µs | 546.35 µs | 333.02 µs | 311.23 µs | **217.65 µs** | 322.67 µs |
-
-### Speedup over Naive at 2048 Tokens
-
-![Speedup vs Hidden Size](results/Speedup.png)
-
-| Hidden size | Shared | No intermediate | Fused | Register reuse | PyTorch |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 768  | 1.65× | 2.58× | **4.10×** | 3.59× | 3.78× |
-| 2048 | 1.75× | 2.85× | 3.80× | **4.42×** | 3.33× |
-| 4096 | 1.78× | 2.93× | 3.13× | **4.48×** | 3.02× |
-
-The final register-reuse optimization is not universally faster. It improves the fused kernel on five of the nine tested shapes, with the largest benefit appearing at `2048×4096`. At smaller or more cache-friendly workloads, the extra register lifetime and instruction overhead can outweigh the reduction in memory traffic.
-
-Two examples illustrate this behavior:
-
-- `2048×4096`: **311.23 → 217.65 µs**, a **1.43× speedup** over fused.
-- `128×4096`: **16.16 → 17.98 µs**, an **11.3% latency regression**.
-
-This workload dependence motivated examining the kernels at the hardware level rather than treating any single optimization as universally beneficial.
+The results above were derived from the latest benchmark run in `rmsnorm_benchmark.csv`.
 
 ## Nsight Compute Profiling
 
