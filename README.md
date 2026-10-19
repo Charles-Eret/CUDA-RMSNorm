@@ -146,3 +146,45 @@ python benchmarks/benchmark_rmsnorm.py
 
 - **Next Step**
   - Use Nsight Compute to compare the Phase 8 and fused Phase 9 kernels at representative workloads and identify the dominant hardware-level bottlenecks.
+
+## Phase 11 — Nsight Compute Profiling
+
+- **Profiling Setup**
+  - Profiled the Phase 8 two-kernel implementation and Phase 9 fused kernel using Nsight Compute.
+  - Analyzed representative workloads of `1×4096`, `128×4096`, and `2048×4096`.
+  - Focused on kernel duration, compute and memory throughput, cache behavior, device-memory traffic, occupancy, and waves per SM.
+
+- **Findings**
+
+  ### Small workload — `1×4096`
+  - The reduction and fused kernels launch only **one thread block**, resulting in extremely low GPU utilization.
+  - The fused kernel achieved only ~17% occupancy and `0.01` waves/SM, while both compute and memory throughput remained near zero relative to peak.
+  - This indicates that the workload is primarily limited by **insufficient parallelism and fixed execution overhead**, rather than compute or memory bandwidth.
+  - Nsight kernel durations for this very small workload were not treated as authoritative because profiling overhead is significant relative to the kernel runtime; CUDA Event benchmarks are used for end-to-end performance comparisons.
+
+  ### Medium workload — `128×4096`
+  - Fusion reduced the combined Phase 8 kernel duration from ~27 µs to ~18 µs in the Nsight profile.
+  - Device-memory read traffic fell from roughly **4.2 MB across the two Phase 8 kernels to ~2.2 MB** in the fused kernel.
+  - Cache hit rates also increased substantially after fusion, indicating improved temporal locality when `x` is reread during normalization shortly after the reduction pass.
+  - The fused kernel still exposed only `0.71` waves/SM and achieved ~73% occupancy despite having 100% theoretical occupancy, indicating that **available block-level parallelism**, rather than register or shared-memory pressure, limits utilization at this workload.
+
+  ### Large workload — `2048×4096`
+  - Increasing token count provides enough blocks to fully utilize the GPU: the fused kernel reached ~95% achieved occupancy and `11.38` waves/SM.
+  - Memory throughput reached **~92% of peak**, while compute throughput remained only **~23%**, strongly indicating a **memory-bandwidth bottleneck**.
+  - Fusion provided much less reduction in device-memory traffic at this workload because the larger working set reduced cache effectiveness.
+  - Consequently, the performance benefit of fusion narrowed substantially compared with the medium workload.
+
+- **Interpretation**
+  - The dominant bottleneck changes with workload size:
+    - **Small workloads:** insufficient parallelism and fixed overhead dominate.
+    - **Medium workloads:** fusion significantly improves cache locality, but block-level parallelism is still limited.
+    - **Large workloads:** sufficient parallelism is available, and execution becomes primarily **memory-bandwidth bound**.
+  - Register pressure and shared-memory capacity are not major limitations: the fused kernel uses only 16 registers/thread and ~1 KB shared memory per block, with 100% theoretical occupancy.
+  - Fusion therefore improves performance not only by eliminating an intermediate tensor and kernel launch, but also by improving temporal locality between the reduction and normalization passes.
+
+- **Primary Remaining Bottleneck**
+  - For large workloads, the fused kernel is limited primarily by **memory traffic rather than computation, occupancy, or register pressure**.
+  - The kernel still reads `x` once for the RMS reduction and again for normalization. Cache reuse hides some of this traffic for smaller workloads, but becomes much less effective as the working set grows.
+
+- **Next Step**
+  - Investigate a profiling-driven optimization that reduces the second global-memory read of `x`, while measuring the tradeoff between lower memory traffic and increased register pressure/occupancy.

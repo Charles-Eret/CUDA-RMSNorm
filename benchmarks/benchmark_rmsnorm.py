@@ -2,6 +2,7 @@ import torch
 import csv
 import os
 from pathlib import Path
+import statistics
 
 from torch.utils.cpp_extension import load
 
@@ -27,7 +28,6 @@ def get_implementations():
 
     # Register new versions here. Each callable must accept (x, gamma, eps).
     return {
-        "pytorch": rmsnorm_torch,
         "naive": extension.rmsnorm_naive,
         "shared": extension.rmsnorm_shared,
         "no_intermediate": extension.rmsnorm_no_intermediate,
@@ -38,32 +38,62 @@ def rmsnorm_torch(x, gamma, eps=1e-6):
     rms = torch.sqrt(torch.mean(x * x, dim=-1, keepdim=True) + eps) # each token gets normalized with its own sum
     return x / rms * gamma
 
-def benchmark(fn, warmup=20, iterations=100):
+def benchmark_torch_rmsnorm(hidden_size, eps, gamma, x, tokens, expected, results):
+    # Create optimized PyTorch RMSNorm for this hidden size
+    pytorch_layer = torch.nn.RMSNorm(
+        hidden_size,
+        eps=eps,
+        elementwise_affine=True,
+        device="cuda",
+        dtype=torch.float32,
+    )
 
-    # warm up gpu
+    pytorch_layer.weight.copy_(gamma)
+    # Benchmark optimized PyTorch separately
+    torch.testing.assert_close(
+        pytorch_layer(x),
+        expected,
+        rtol=1e-4,
+        atol=1e-5,
+    )
+
+    latency_us = benchmark(lambda: pytorch_layer(x))
+
+    results.append({
+        "tokens": tokens,
+        "hidden_size": hidden_size,
+        "implementation": "pytorch",
+        "latency_us": latency_us,
+    })
+    print(f"{tokens}x{hidden_size} pytorch: {latency_us:.3f} us")
+
+def benchmark(fn, warmup=20, iterations=100, repeats=20):
+    # Warm up GPU
     for _ in range(warmup):
         fn()
 
-    # wait for gpu workload to finish
     torch.cuda.synchronize()
 
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
+    samples_us = []
 
-    start.record()
+    for _ in range(repeats):
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
 
-    for _ in range(iterations):
-        fn()
+        start.record()
 
-    end.record()
+        for _ in range(iterations):
+            fn()
 
-    torch.cuda.synchronize()
+        end.record()
+        torch.cuda.synchronize()
 
-    elapsed_ms = start.elapsed_time(end)
+        elapsed_ms = start.elapsed_time(end)
 
-    avg_ms = elapsed_ms / iterations
+        avg_us = (elapsed_ms / iterations) * 1000
+        samples_us.append(avg_us)
 
-    return avg_ms * 1000
+    return statistics.median(samples_us)
 
 def record(results):
     output_path = PROJECT_ROOT / "results" / "rmsnorm_benchmark.csv"
@@ -88,15 +118,21 @@ def main():
     if not torch.cuda.is_available():
         raise RuntimeError("The RMSNorm benchmark requires a CUDA-capable PyTorch environment.")
 
+    torch.manual_seed(0)
     implementations = get_implementations()
     eps = 1e-6
     results = []
 
-    SHAPES = [ # (num tokens, hidden size)
+    # (num tokens, hidden size)
+    SHAPES = [
         (1, 768),
+        (1, 2048),
         (1, 4096),
         (128, 768),
+        (128, 2048),
         (128, 4096),
+        (2048, 768),
+        (2048, 2048),
         (2048, 4096),
     ]
 
@@ -130,6 +166,8 @@ def main():
                 "latency_us": latency_us,
             })
             print(f"{tokens}x{hidden_size} {name}: {latency_us:.3f} us")
+
+        benchmark_torch_rmsnorm(hidden_size, eps, gamma, x, tokens, expected, results)
 
     record(results)
 
