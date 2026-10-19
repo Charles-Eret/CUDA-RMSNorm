@@ -16,6 +16,7 @@ CUDA_SOURCES = [
     "src/rmsnorm_shared.cu",
     "src/rmsnorm_no_intermediate.cu",
     "src/rmsnorm_fused.cu",
+    "src/rmsnorm_optimizedv1.cu",
 ]
 
 
@@ -32,6 +33,7 @@ def get_implementations():
         "shared": extension.rmsnorm_shared,
         "no_intermediate": extension.rmsnorm_no_intermediate,
         "fused": extension.rmsnorm_fused,
+        "optimizedv1": extension.rmsnorm_optimizedv1,
     }
 
 
@@ -41,7 +43,7 @@ def main():
 
     parser.add_argument(
         "--implementation",
-        choices=["naive", "shared", "no_intermediate", "fused"],
+        choices=["naive", "shared", "no_intermediate", "fused", "optimizedv1"],
         required=True,
     )
 
